@@ -1,8 +1,11 @@
 # motor_controller.py
 
 import RPi.GPIO as GPIO
+import time
+import asyncio
 from controllers.controller import BaseController
 from utils import get_logger
+
 
 IN1_LEFT = 17
 IN2_LEFT = 27
@@ -20,6 +23,9 @@ class MotorController(BaseController):
         self._init_gpio()
         self.logger = get_logger(self.name)
 
+        self._last_cmd = (0.0, 0.0)
+        self._last_cmd_time = time.time()
+        self._loop_task = asyncio.create_task(self._motor_loop())
 
 
     def _init_gpio(self):
@@ -59,19 +65,24 @@ class MotorController(BaseController):
         duty_right = abs(right_val) * 100
         self.pwm_right.ChangeDutyCycle(duty_right)
     
-    async def run_motor_loop(left=0.0, right=0.0):
+    async def _motor_loop(self):
         while True:
-            self._set_motor_values(left, right)
+            now = time.time()
+            if now - self._last_cmd_time > 0.2:  # idle timeout 200ms
+                self._set_motor_values(0.0, 0.0)
+            else:
+                self._set_motor_values(*self._last_cmd)
+            await asyncio.sleep(0.1)
 
 
     async def handle_command(self, data: dict):
         if data.get("type") != "motor_cmd":
-            return  # Not relevant for motor
-
-        left = data.get("left_motor", 0.0)
-        right = data.get("right_motor", 0.0)
-        self.logger.info(f"[Set Command]: left={left:.2f}, right={right:.2f}")
-        self.run_motor_loop(left=left, right=right)
+            return
+        left = float(data.get("left_motor", 0.0))
+        right = float(data.get("right_motor", 0.0))
+        self._last_cmd = (left, right)
+        self._last_cmd_time = time.time()
+    
 
     def cleanup(self):
         try:

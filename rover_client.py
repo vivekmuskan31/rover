@@ -39,7 +39,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    comm.clean_all()
+    CommunicationManager.get_instance().clean_all()
 
 # --- Run App ---
 if __name__ == "__main__":
